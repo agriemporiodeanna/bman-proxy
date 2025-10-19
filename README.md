@@ -1,30 +1,29 @@
-# Bman Proxy (Render)
+# Bman Proxy v3 (getAnagrafiche)
 
-Proxy leggero che chiama il servizio SOAP `.asmx` di Bman sulla porta 3555 e restituisce JSON via HTTPS (443).
-Perfetto per aggirare i limiti di Aruba (porte in uscita bloccate).
+Supporta il metodo SOAP **getAnagrafiche** con filtri/sort/paginazione.
 
 ## Deploy su Render
-1. Crea un nuovo repo su GitHub e carica questa cartella.
-2. Su Render: **New Web Service** → collega il repo.
-3. Render userà automaticamente il `Dockerfile`.
-4. In **Settings → Environment Variables**, aggiungi:
-   - `BMAN_HOST = emporiodeanna.bman.it`
-   - `BMAN_PORT = 3555`
-   - `BMAN_TOKEN = <il_tuo_token_Bman>`
-   - `BMAN_METHOD = GetArticoli`  (o quello corretto)
-   - `PROXY_KEY = <una_chiave_segreta>` (opzionale ma consigliata)
-5. Deploy. Otterrai un URL tipo `https://bman-proxy.onrender.com/`.
+- Dockerfile incluso
+- Start: `php -S 0.0.0.0:$PORT -t public`
+- Env:
+  - `BMAN_HOST = emporiodeanna.bman.it`
+  - `BMAN_PORT = 3555`
+  - `BMAN_TOKEN = <chiave>` (parametro "chiave" delle API Bman)
+  - `BMAN_METHOD = getAnagrafiche`
+  - `BMAN_NS = http://tempuri.org/` (cambialo se il WSDL indica un targetNamespace diverso)
+  - `PROXY_KEY = <chiave_proxy>` (opzionale)
 
-## Test rapido
-```
-https://<NOME-SERVIZIO>.onrender.com/?m=GetArticoli&page=1&per_page=5&key=<PROXY_KEY>
-```
-
-## Nota
-Se il servizio SOAP usa metodi/parametri diversi (es. `GetProducts`), cambia `BMAN_METHOD` o usa `?m=GetProducts` nella query.
-
-
-## Novità v2
-- `?wsdl=1` per recuperare il WSDL originale.
-- `?ops=1` per elencare le operazioni SOAP disponibili.
-- `ns=` parametro per impostare il namespace della SOAPAction (default `http://tempuri.org/`).
+## Endpoints utili
+- `/?wsdl=1&key=...` → scarica WSDL
+- `/?ops=1&key=...` → elenca le operazioni
+- Chiamata prodotti:
+  ```
+  /?m=getAnagrafiche&
+    filtri=[{"chiave":"ecommerce","operatore":"=","valore":"True"}]&
+    ordCampo=ID&ordDir=1&
+    page=1&
+    depositi=&
+    dettVarianti=false&
+    key=...
+  ```
+- Puoi passare `ns=` per impostare il namespace della SOAPAction se diverso da `http://tempuri.org/`.

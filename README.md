@@ -22,3 +22,9 @@ https://<NOME-SERVIZIO>.onrender.com/?m=GetArticoli&page=1&per_page=5&key=<PROXY
 
 ## Nota
 Se il servizio SOAP usa metodi/parametri diversi (es. `GetProducts`), cambia `BMAN_METHOD` o usa `?m=GetProducts` nella query.
+
+
+## Novità v2
+- `?wsdl=1` per recuperare il WSDL originale.
+- `?ops=1` per elencare le operazioni SOAP disponibili.
+- `ns=` parametro per impostare il namespace della SOAPAction (default `http://tempuri.org/`).

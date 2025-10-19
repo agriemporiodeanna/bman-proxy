@@ -1,46 +1,81 @@
 <?php
-// public/index.php - Bman SOAP proxy (Render)
+// public/index.php - Bman SOAP proxy (Render) v2
 declare(strict_types=1);
 
-// Environment variables (configure in Render)
+// ===== Env =====
 $BMAN_HOST   = getenv('BMAN_HOST')   ?: 'emporiodeanna.bman.it';
 $BMAN_PORT   = getenv('BMAN_PORT')   ?: '3555';
-$BMAN_TOKEN  = getenv('BMAN_TOKEN')  ?: '';                 // <-- set in Render
-$DEFAULT_M   = getenv('BMAN_METHOD') ?: 'GetArticoli';      // default method
-$PROXY_KEY   = getenv('PROXY_KEY')   ?: '';                 // simple protection key (optional)
+$BMAN_TOKEN  = getenv('BMAN_TOKEN')  ?: '';
+$DEFAULT_M   = getenv('BMAN_METHOD') ?: 'GetArticoli';
+$PROXY_KEY   = getenv('PROXY_KEY')   ?: '';
 
-// Simple auth
+// ===== Simple auth =====
 if ($PROXY_KEY !== '') {
   $k = $_GET['key'] ?? '';
   if (!hash_equals($PROXY_KEY, $k)) {
     http_response_code(401);
     header('Content-Type: application/json; charset=utf-8');
-    echo json_encode(['ok'=>false,'error'=>'Unauthorized']);
-    exit;
+    echo json_encode(['ok'=>false,'error'=>'Unauthorized']); exit;
   }
 }
 
-// Params
-$method   = $_GET['m'] ?? $DEFAULT_M;
-$page     = max(1, (int)($_GET['page'] ?? 1));
-$perPage  = min(200, max(1, (int)($_GET['per_page'] ?? 100)));
+$endpoint = "https://{$BMAN_HOST}:{$BMAN_PORT}/bmanapi.asmx";
+$wsdlUrl  = $endpoint.'?WSDL';
 
-header('Content-Type: application/json; charset=utf-8');
-
-if ($BMAN_TOKEN === '') {
-  http_response_code(500);
-  echo json_encode(['ok'=>false,'error'=>'Missing BMAN_TOKEN env var']); exit;
+// ===== Utilities =====
+function out_json($arr, int $code=200){
+  http_response_code($code);
+  header('Content-Type: application/json; charset=utf-8');
+  echo json_encode($arr, JSON_UNESCAPED_UNICODE);
+  exit;
 }
 
-$endpoint  = "https://{$BMAN_HOST}:{$BMAN_PORT}/bmanapi.asmx";
-$soapAction = "http://tempuri.org/{$method}";
+// ===== Special: return raw WSDL =====
+if (isset($_GET['wsdl'])) {
+  $ch = curl_init($wsdlUrl);
+  curl_setopt_array($ch,[
+    CURLOPT_RETURNTRANSFER=>true, CURLOPT_CONNECTTIMEOUT=>8, CURLOPT_TIMEOUT=>20,
+    CURLOPT_SSL_VERIFYPEER=>false, CURLOPT_SSL_VERIFYHOST=>false
+  ]);
+  $resp = curl_exec($ch); $err=curl_error($ch); $code=curl_getinfo($ch, CURLINFO_HTTP_CODE); curl_close($ch);
+  if($resp===false){ out_json(['ok'=>false,'error'=>"cURL error: $err"], 502); }
+  header('Content-Type: text/xml; charset=utf-8');
+  echo $resp; exit;
+}
+
+// ===== Special: list operations from WSDL =====
+if (isset($_GET['ops'])) {
+  $ch = curl_init($wsdlUrl);
+  curl_setopt_array($ch,[
+    CURLOPT_RETURNTRANSFER=>true, CURLOPT_CONNECTTIMEOUT=>8, CURLOPT_TIMEOUT=>20,
+    CURLOPT_SSL_VERIFYPEER=>false, CURLOPT_SSL_VERIFYHOST=>false
+  ]);
+  $resp = curl_exec($ch); $err=curl_error($ch); $code=curl_getinfo($ch, CURLINFO_HTTP_CODE); curl_close($ch);
+  if($resp===false){ out_json(['ok'=>false,'error'=>"cURL error: $err"], 502); }
+  $xml = @simplexml_load_string($resp);
+  if(!$xml){ out_json(['ok'=>false,'error'=>'Invalid WSDL']); }
+  $xml->registerXPathNamespace('wsdl','http://schemas.xmlsoap.org/wsdl/');
+  $ops = [];
+  foreach($xml->xpath('//wsdl:operation') as $op){ $ops[] = (string)$op['name']; }
+  out_json(['ok'=>true,'operations'=>$ops]);
+}
+
+// ===== Normal proxy call =====
+$method  = $_GET['m'] ?? $DEFAULT_M;
+$ns      = $_GET['ns'] ?? 'http://tempuri.org/'; // allow override
+$page    = max(1, (int)($_GET['page'] ?? 1));
+$perPage = min(200, max(1, (int)($_GET['per_page'] ?? 100)));
+
+if ($BMAN_TOKEN === '') out_json(['ok'=>false,'error'=>'Missing BMAN_TOKEN env var'], 500);
+
+$soapAction = rtrim($ns,'/').'/'.$method;
 
 $xml = '<?xml version="1.0" encoding="utf-8"?>'
      . '<soap:Envelope xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" '
      . 'xmlns:xsd="http://www.w3.org/2001/XMLSchema" '
      . 'xmlns:soap="http://schemas.xmlsoap.org/soap/envelope/">'
      . '<soap:Body>'
-     . "<{$method} xmlns=\"http://tempuri.org/\">"
+     . "<{$method} xmlns="".htmlspecialchars($ns,ENT_QUOTES)."">"
      . "<token>{$BMAN_TOKEN}</token>"
      . "<Page>{$page}</Page>"
      . "<PageSize>{$perPage}</PageSize>"
@@ -53,7 +88,7 @@ curl_setopt_array($ch, [
   CURLOPT_POST            => true,
   CURLOPT_HTTPHEADER      => [
     'Content-Type: text/xml; charset=utf-8',
-    "SOAPAction: \"$soapAction\""
+    "SOAPAction: "$soapAction""
   ],
   CURLOPT_POSTFIELDS      => $xml,
   CURLOPT_RETURNTRANSFER  => true,
@@ -67,28 +102,26 @@ $err  = curl_error($ch);
 $code = curl_getinfo($ch, CURLINFO_HTTP_CODE);
 curl_close($ch);
 
-if ($resp === false) {
-  http_response_code(502);
-  echo json_encode(['ok'=>false,'error'=>"cURL error: $err"]); exit;
-}
-if ($code >= 400) {
-  http_response_code($code);
-  echo json_encode(['ok'=>false,'error'=>"HTTP $code", 'raw'=>substr($resp,0,1000)]); exit;
-}
+if ($resp === false) out_json(['ok'=>false,'error'=>"cURL error: $err"], 502);
+if ($code >= 400)    out_json(['ok'=>false,'error'=>"HTTP $code",'raw'=>substr($resp,0,1000)], $code);
 
 libxml_use_internal_errors(true);
 $xmlObj = simplexml_load_string($resp);
-if ($xmlObj === false) {
-  echo json_encode(['ok'=>false,'error'=>'Invalid XML', 'raw'=>substr($resp,0,1000)]); exit;
-}
-$ns = $xmlObj->getNamespaces(true);
-$body = $xmlObj->children($ns['soap'])->Body ?? null;
-if (!$body) { echo json_encode(['ok'=>false,'error'=>'No SOAP Body', 'raw'=>substr($resp,0,1000)]); exit; }
+if(!$xmlObj) out_json(['ok'=>false,'error'=>'Invalid XML','raw'=>substr($resp,0,1000)], 502);
 
-$respNode = $body->children('http://tempuri.org/')->{$method.'Response'} ?? null;
-$result   = $respNode ? $respNode->{$method.'Result'} : null;
+$nsMap = $xmlObj->getNamespaces(true);
+$body = $xmlObj->children($nsMap['soap'])->Body ?? null;
+if(!$body) out_json(['ok'=>false,'error'=>'No SOAP Body','raw'=>substr($resp,0,1000)], 502);
+
+$respNode = $body->children($ns)->{$method.'Response'} ?? null;
+if(!$respNode){
+  // Try also tempuri if ns mismatch
+  $respNode = $body->children('http://tempuri.org/')->{$method.'Response'} ?? null;
+}
+$result = $respNode ? $respNode->{$method.'Result'} : null;
 $json = json_decode(json_encode($result), true);
 
+// Try extract items
 $items = null;
 if (is_array($json)) {
   foreach (['Products','ProductList','Articoli','Items','Catalog','Result','Data','data'] as $k) {
@@ -99,10 +132,7 @@ if (is_array($json)) {
   }
 }
 
-echo json_encode([
-  'ok'       => true,
-  'method'   => $method,
-  'page'     => $page,
-  'per_page' => $perPage,
-  'items'    => $items ?: $json,
-], JSON_UNESCAPED_UNICODE);
+out_json([
+  'ok'=>true, 'method'=>$method, 'ns'=>$ns, 'page'=>$page, 'per_page'=>$perPage,
+  'items'=>$items ?: $json, 'raw'=> $items? null : $json
+]);

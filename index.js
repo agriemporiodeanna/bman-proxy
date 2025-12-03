@@ -13,15 +13,18 @@ app.post("/bman", async (req, res) => {
   try {
     const response = await fetch(bmanUrl, {
       method: "POST",
+      headers: {
+        "Content-Type": "application/x-www-form-urlencoded"
+      },
       body: new URLSearchParams(req.body)
     });
 
     const xml = await response.text();
 
-    // Estrai JSON dalla risposta SOAP
+    // Estrai JSON
     const match = xml.match(/>(\{.*\})</s);
     if (!match) {
-      return res.status(500).send("Errore: impossibile estrarre JSON da Bman.\n" + xml);
+      return res.status(500).send("Errore: impossibile estrarre JSON da Bman.\n\n" + xml);
     }
 
     return res.json(JSON.parse(match[1]));
@@ -31,7 +34,9 @@ app.post("/bman", async (req, res) => {
   }
 });
 
-// Porta Render
+// Porta di Render
 app.listen(process.env.PORT || 3000, () => {
   console.log("Bman proxy attivo!");
 });
+
+

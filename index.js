@@ -5,23 +5,26 @@ import fetch from "node-fetch";
 const app = express();
 app.use(bodyParser.urlencoded({ extended: true }));
 
-// PROXY BMAN
 app.post("/bman", async (req, res) => {
 
-  const bmanUrl = "https://emporiodeanna.bman.it:3555/bmanapi.asmx/getAnagrafiche";
+  const bmanUrl = "https://emporiodeanna.bman.it:3555/bmanapi.asmx";
+
+  // Aggiungiamo il nome del metodo richiesto
+  const params = new URLSearchParams({
+    nomeMetodo: "getAnagrafiche",
+    ...req.body
+  });
 
   try {
     const response = await fetch(bmanUrl, {
       method: "POST",
-      headers: {
-        "Content-Type": "application/x-www-form-urlencoded"
-      },
-      body: new URLSearchParams(req.body)
+      headers: { "Content-Type": "application/x-www-form-urlencoded" },
+      body: params.toString()
     });
 
     const xml = await response.text();
 
-    // Estrai JSON
+    // Estrai JSON dal SOAP
     const match = xml.match(/>(\{.*\})</s);
     if (!match) {
       return res.status(500).send("Errore: impossibile estrarre JSON da Bman.\n\n" + xml);
@@ -30,13 +33,14 @@ app.post("/bman", async (req, res) => {
     return res.json(JSON.parse(match[1]));
 
   } catch (err) {
-    return res.status(500).send("Errore proxy: " + err);
+    return res.status(500).send("Errore proxy: " + err.toString());
   }
 });
 
-// Porta di Render
 app.listen(process.env.PORT || 3000, () => {
-  console.log("Bman proxy attivo!");
+  console.log("Bman proxy attivo con metodo corretto!");
 });
+
+
 
 

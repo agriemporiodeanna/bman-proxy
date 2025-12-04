@@ -1,12 +1,14 @@
-app.get("/", (req, res) => {
-  res.send("VERSIONE SOAP ATTIVA");
-});
 import express from "express";
 import bodyParser from "body-parser";
 import fetch from "node-fetch";
 
 const app = express();
 app.use(bodyParser.urlencoded({ extended: true }));
+
+// ENDPOINT DI TEST PER VERIFICARE LA VERSIONE ATTIVA
+app.get("/", (req, res) => {
+  res.send("VERSIONE SOAP ATTIVA");
+});
 
 // SOAP Envelope corretto usando il namespace cloud.bman.it
 function buildSOAPEnvelope(params) {
@@ -65,4 +67,3 @@ app.post("/bman", async (req, res) => {
 app.listen(process.env.PORT || 3000, () => {
   console.log("Bman SOAP proxy attivo con namespace cloud.bman.it!");
 });
-

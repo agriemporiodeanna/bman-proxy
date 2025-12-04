@@ -1,3 +1,6 @@
+app.get("/", (req, res) => {
+  res.send("VERSIONE SOAP ATTIVA");
+});
 import express from "express";
 import bodyParser from "body-parser";
 import fetch from "node-fetch";
@@ -62,3 +65,4 @@ app.post("/bman", async (req, res) => {
 app.listen(process.env.PORT || 3000, () => {
   console.log("Bman SOAP proxy attivo con namespace cloud.bman.it!");
 });
+

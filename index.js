@@ -4,13 +4,9 @@ import fetch from "node-fetch";
 
 const app = express();
 app.use(bodyParser.urlencoded({ extended: true }));
+app.use(bodyParser.json());
 
-// ENDPOINT DI TEST PER VERIFICARE LA VERSIONE ATTIVA
-app.get("/", (req, res) => {
-  res.send("VERSIONE SOAP ATTIVA");
-});
-
-// SOAP Envelope corretto usando il namespace cloud.bman.it
+// SOAP Envelope corretto per getAnagraficheV3
 function buildSOAPEnvelope(params) {
   return `
 <?xml version="1.0" encoding="utf-8"?>
@@ -18,23 +14,23 @@ function buildSOAPEnvelope(params) {
                xmlns:xsd="http://www.w3.org/2001/XMLSchema"
                xmlns:soap="http://schemas.xmlsoap.org/soap/envelope/">
   <soap:Body>
-    <getAnagrafiche xmlns="http://cloud.bman.it/">
+    <getAnagraficheV3 xmlns="http://cloud.bman.it/">
       <chiave>${params.chiave}</chiave>
-      <filtri>${params.filtri}</filtri>
+      <filtri/>
       <ordinamentoCampo>${params.ordinamentoCampo}</ordinamentoCampo>
-      <ordinamentoDirezione>${params.ordinamentoDirezione}</ordinamentoDirezione>
-      <numeroPagina>${params.numeroPagina}</numeroPagina>
-      <listaDepositi>${params.listaDepositi}</listaDepositi>
-      <dettaglioVarianti>${params.dettaglioVarianti}</dettaglioVarianti>
-    </getAnagrafiche>
+      <ordinamentoDirezione>1</ordinamentoDirezione>
+      <numeroPagina>1</numeroPagina>
+      <listaDepositi/>
+      <dettaglioVarianti>false</dettaglioVarianti>
+    </getAnagraficheV3>
   </soap:Body>
 </soap:Envelope>
   `.trim();
 }
 
+// Endpoint pubblico per PHP
 app.post("/bman", async (req, res) => {
   const bmanUrl = "https://emporiodeanna.bman.it:3555/bmanapi.asmx";
-
   const soapEnvelope = buildSOAPEnvelope(req.body);
 
   try {
@@ -42,14 +38,14 @@ app.post("/bman", async (req, res) => {
       method: "POST",
       headers: {
         "Content-Type": "text/xml; charset=utf-8",
-        "SOAPAction": "http://cloud.bman.it/getAnagrafiche"
+        "SOAPAction": "http://cloud.bman.it/getAnagraficheV3"
       },
       body: soapEnvelope
     });
 
     const xml = await response.text();
 
-    // Estrazione automatica del JSON dentro al SOAP
+    // Prova ad estrarre JSON dentro al SOAP
     const match = xml.match(/>(\{.*\})</s);
     if (!match) {
       return res.status(500).send(
@@ -64,6 +60,12 @@ app.post("/bman", async (req, res) => {
   }
 });
 
-app.listen(process.env.PORT || 3000, () => {
-  console.log("Bman SOAP proxy attivo con namespace cloud.bman.it!");
+// Resta vivo su Render
+app.get("/", (req, res) => {
+  res.send("Bman SOAP Proxy attivo (V3) 🚀");
+});
+
+const PORT = process.env.PORT || 3000;
+app.listen(PORT, () => {
+  console.log("Bman SOAP Proxy attivo su porta " + PORT);
 });
